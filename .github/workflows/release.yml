@@ -1,0 +1,71 @@
+name: Build and publish release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore Il2CppDumper/Il2CppDumper.csproj
+
+      - name: Publish net6.0
+        run: |
+          dotnet publish Il2CppDumper/Il2CppDumper.csproj -c Release -f net6.0 -o ${{ runner.temp }}\publish\net6.0 --self-contained false
+
+      - name: Publish net8.0
+        run: |
+          dotnet publish Il2CppDumper/Il2CppDumper.csproj -c Release -f net8.0 -o ${{ runner.temp }}\publish\net8.0 --self-contained false
+
+      - name: Package release assets
+        run: |
+          mkdir release
+          powershell -Command "Compress-Archive -Path '${{ runner.temp }}\\publish\\net6.0\\*' -DestinationPath '$env:GITHUB_WORKSPACE\\release\\Il2CppDumper-net6.0.zip' -Force"
+          powershell -Command "Compress-Archive -Path '${{ runner.temp }}\\publish\\net8.0\\*' -DestinationPath '$env:GITHUB_WORKSPACE\\release\\Il2CppDumper-net8.0.zip' -Force"
+
+      - name: Create GitHub release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          body: |-
+            Build artifacts for Il2CppDumper.
+            Includes published binaries for net6.0 and net8.0.
+          draft: false
+          prerelease: false
+
+      - name: Upload net6.0 asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release/Il2CppDumper-net6.0.zip
+          asset_name: Il2CppDumper-net6.0.zip
+          asset_content_type: application/zip
+
+      - name: Upload net8.0 asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release/Il2CppDumper-net8.0.zip
+          asset_name: Il2CppDumper-net8.0.zip
+          asset_content_type: application/zip
